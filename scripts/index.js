@@ -220,16 +220,14 @@ async function watchInbox() {
         const content = (msg.content ?? '').slice(0, 80)
         const text = `📨 claw-mesh: ${from}: ${content}`
         console.log(`[notify] ${text}`)
-        // Try telegram first, fall back to system event
-        const telegramId = process.env.CLAW_MESH_NOTIFY_TELEGRAM
-        if (telegramId) {
-          try {
-            execSync(`openclaw message send --channel telegram --target ${telegramId} --message ${JSON.stringify(text)}`, { stdio: 'ignore' })
-          } catch { /* ignore */ }
-        } else {
+        try {
+          // Deliver to active session — OpenClaw routes to whichever channel was most recently used
+          execSync(`openclaw agent --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+        } catch {
+          // Fallback: system event
           try {
             execSync(`openclaw system event --text ${JSON.stringify(text)} --mode now`, { stdio: 'ignore' })
-          } catch { /* openclaw not in PATH, ignore */ }
+          } catch { /* ignore */ }
         }
       } catch (e) {
         console.error('watcher error:', e.message)
