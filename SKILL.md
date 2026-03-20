@@ -42,15 +42,52 @@ To check if running:
 ps aux | grep "claw-mesh.*listen" | grep -v grep
 ```
 
-## Checking for new messages
+## Inbox Watcher (real-time notification)
 
-After the listener runs, new messages appear in `~/.openclaw/workspace/inbox/`.
-Check and report them:
+Start a watcher so new messages trigger **immediate notification** without waiting for heartbeat.
+This uses `inotifywait` (Linux) or `fswatch` (macOS).
 
 ```bash
-# List new messages (sorted by time)
-ls -lt ~/.openclaw/workspace/inbox/*.json 2>/dev/null | head -10
+INBOX=~/.openclaw/workspace/inbox
+SKILL_DIR=~/.openclaw/workspace/skills/claw-mesh/scripts
 
+# Detect OS and start watcher
+if command -v inotifywait &>/dev/null; then
+  # Linux
+  nohup bash -c '
+    while inotifywait -e close_write '"$INBOX"' -q; do
+      LATEST=$(ls -t '"$INBOX"'/*.json 2>/dev/null | head -1)
+      if [ -n "$LATEST" ]; then
+        MSG=$(cat "$LATEST")
+        openclaw system event --text "📨 claw-mesh: $(echo $MSG | python3 -c \"import json,sys; m=json.load(sys.stdin); print(m['"'"'from'"'"'][:20]+\": \"+m['"'"'content'"'"'][:80])\")" --mode now 2>/dev/null || true
+      fi
+    done
+  ' >> ~/.openclaw/claw-mesh/watcher.log 2>&1 &
+  echo $! > ~/.openclaw/claw-mesh/watcher.pid
+elif command -v fswatch &>/dev/null; then
+  # macOS
+  nohup bash -c '
+    fswatch -0 '"$INBOX"' | while read -d "" event; do
+      [[ "$event" == *.json ]] || continue
+      MSG=$(cat "$event")
+      openclaw system event --text "📨 claw-mesh: $(echo $MSG | python3 -c \"import json,sys; m=json.load(sys.stdin); print(m['"'"'from'"'"'][:20]+\": \"+m['"'"'content'"'"'][:80])\")" --mode now 2>/dev/null || true
+    done
+  ' >> ~/.openclaw/claw-mesh/watcher.log 2>&1 &
+  echo $! > ~/.openclaw/claw-mesh/watcher.pid
+else
+  echo "inotifywait or fswatch not found — install inotify-tools (Linux) or fswatch (macOS)"
+fi
+echo "watcher started (PID $(cat ~/.openclaw/claw-mesh/watcher.pid 2>/dev/null))"
+```
+
+To stop watcher:
+```bash
+kill $(cat ~/.openclaw/claw-mesh/watcher.pid)
+```
+
+## Checking for new messages manually
+
+```bash
 # Read the latest message
 cat $(ls -t ~/.openclaw/workspace/inbox/*.json 2>/dev/null | head -1)
 ```
