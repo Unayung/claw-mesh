@@ -194,6 +194,31 @@ async function skillSend(targetNpub, skillId) {
   console.log(`Skill "${skillId}" sent successfully.`)
 }
 
+// ── Session Delivery ───────────────────────────────────────────────────────────
+function deliverToLastActiveSession(text, execSync) {
+  try {
+    const sessionsFile = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json')
+    if (!fs.existsSync(sessionsFile)) return false
+    const data = JSON.parse(fs.readFileSync(sessionsFile, 'utf-8'))
+
+    const SKIP = ['cron', 'subagent', 'tui', ':main', 'openai-user']
+    const sessions = Object.entries(data)
+      .filter(([k]) => !SKIP.some(s => k.includes(s)))
+      .sort(([,a], [,b]) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+
+    if (!sessions.length) return false
+
+    const [, meta] = sessions[0]
+    const sessionId = meta.sessionId
+    if (!sessionId) return false
+
+    execSync(`openclaw agent --session-id ${sessionId} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ── Inbox Watcher ──────────────────────────────────────────────────────────────
 // Pure Node.js fs.watch — works on macOS and Linux without any extra tools
 async function watchInbox() {
@@ -220,16 +245,9 @@ async function watchInbox() {
         const content = (msg.content ?? '').slice(0, 80)
         const text = `📨 claw-mesh: ${from}: ${content}`
         console.log(`[notify] ${text}`)
-        // Notify via configured channel/target, or fall back to system event
-        const notifyChannel = process.env.CLAW_MESH_NOTIFY_CHANNEL  // e.g. "telegram"
-        const notifyTarget  = process.env.CLAW_MESH_NOTIFY_TARGET   // e.g. "542526171"
-        try {
-          if (notifyChannel && notifyTarget) {
-            execSync(`openclaw agent --to ${notifyTarget} --channel ${notifyChannel} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
-          } else {
-            execSync(`openclaw agent --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
-          }
-        } catch {
+        // Find last active real channel session and deliver there
+        const delivered = deliverToLastActiveSession(text, execSync)
+        if (!delivered) {
           try {
             execSync(`openclaw system event --text ${JSON.stringify(text)} --mode now`, { stdio: 'ignore' })
           } catch { /* ignore */ }
