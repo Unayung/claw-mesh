@@ -201,18 +201,36 @@ function deliverToLastActiveSession(text, execSync) {
     if (!fs.existsSync(sessionsFile)) return false
     const data = JSON.parse(fs.readFileSync(sessionsFile, 'utf-8'))
 
-    const SKIP = ['cron', 'subagent', 'tui', ':main', 'openai-user']
-    const sessions = Object.entries(data)
-      .filter(([k]) => !SKIP.some(s => k.includes(s)))
-      .sort(([,a], [,b]) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+    // Real channel patterns to look for (most specific first)
+    const CHANNEL_PATTERNS = [
+      /^agent:main:telegram:direct:/,
+      /^agent:main:whatsapp:/,
+      /^agent:main:discord:channel:/,
+      /^agent:main:signal:/,
+      /^agent:main:telegram:group:/,
+    ]
+    const SKIP = ['cron', 'subagent', 'tui', 'openai-user']
 
-    if (!sessions.length) return false
+    // Find most recently updated real channel session
+    let best = null
+    let bestTime = 0
+    for (const [k, v] of Object.entries(data)) {
+      if (SKIP.some(s => k.includes(s))) continue
+      if (!CHANNEL_PATTERNS.some(p => p.test(k))) continue
+      if ((v.updatedAt ?? 0) > bestTime) {
+        bestTime = v.updatedAt ?? 0
+        best = { key: k, sessionId: v.sessionId }
+      }
+    }
 
-    const [, meta] = sessions[0]
-    const sessionId = meta.sessionId
-    if (!sessionId) return false
-
-    execSync(`openclaw agent --session-id ${sessionId} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+    // If no channel session found, fall back to main session with --deliver
+    // which routes to the last active channel via OpenClaw's own routing
+    const sessionId = best?.sessionId
+    if (sessionId) {
+      execSync(`openclaw agent --session-id ${sessionId} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+    } else {
+      execSync(`openclaw agent --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+    }
     return true
   } catch {
     return false
