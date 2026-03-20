@@ -85,68 +85,80 @@ function whoami() {
   console.log(npub)
 }
 
+async function handleEvent(event, sk, pk) {
+  try {
+    const peerPk = event.pubkey === pk ? pk : event.pubkey
+    const content = await nip04.decrypt(sk, peerPk, event.content)
+    const senderNpub = nip19.npubEncode(event.pubkey)
+    const ts = new Date(event.created_at * 1000).toISOString()
+
+    const skillMatch = content.match(/^\[SKILL:([^\]]+)\]\n([\s\S]*)$/)
+    if (skillMatch) {
+      const skillId = skillMatch[1]
+      const skillContent = skillMatch[2]
+      const skillDir = path.join(SKILLS_DIR, skillId)
+      ensureDir(skillDir)
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), skillContent)
+      console.log(`[${ts}] ${senderNpub}: [SKILL:${skillId}] received → saved to skills/${skillId}/SKILL.md`)
+    } else {
+      console.log(`[${ts}] ${senderNpub}: ${content}`)
+    }
+
+    ensureDir(INBOX_DIR)
+    const inboxFile = path.join(INBOX_DIR, `${timestamp()}_${event.pubkey.slice(0, 8)}.json`)
+    fs.writeFileSync(inboxFile, JSON.stringify({
+      from: senderNpub, fromHex: event.pubkey, content,
+      receivedAt: new Date().toISOString(), nostrEventId: event.id,
+    }, null, 2))
+  } catch (err) {
+    console.error('Failed to decrypt message:', err.message)
+  }
+}
+
 async function listen() {
   const { sk, pk } = loadIdentity()
   ensureDir(INBOX_DIR)
   ensureDir(SKILLS_DIR)
 
-  const pool = new SimplePool()
   console.log('Listening on relays:', RELAYS.join(', '))
   console.log('My pubkey:', nip19.npubEncode(pk))
   console.log('---')
 
-  const since = Math.floor(Date.now() / 1000) - 30 // 30s grace window
-  const sub = pool.subscribeMany(
-    RELAYS,
-    [{ kinds: [4], '#p': [pk], since }],  // messages TO me (includes self-send)
-    {
-      async onevent(event) {
-        try {
-          // self-send: sender === me, decrypt with my sk + my pk
-          const peerPk = event.pubkey === pk ? pk : event.pubkey
-          const content = await nip04.decrypt(sk, peerPk, event.content)
-          const senderNpub = nip19.npubEncode(event.pubkey)
-          const ts = new Date(event.created_at * 1000).toISOString()
+  const since = Math.floor(Date.now() / 1000) - 30
+  const filter = { kinds: [4], '#p': [pk], since }
+  const seenIds = new Set()
 
-          // Check if this is a skill transfer
-          const skillMatch = content.match(/^\[SKILL:([^\]]+)\]\n([\s\S]*)$/)
-          if (skillMatch) {
-            const skillId = skillMatch[1]
-            const skillContent = skillMatch[2]
-            const skillDir = path.join(SKILLS_DIR, skillId)
-            ensureDir(skillDir)
-            fs.writeFileSync(path.join(skillDir, 'SKILL.md'), skillContent)
-            console.log(`[${ts}] ${senderNpub}: [SKILL:${skillId}] received → saved to skills/${skillId}/SKILL.md`)
-          } else {
-            console.log(`[${ts}] ${senderNpub}: ${content}`)
+  // Use raw WebSocket to avoid SimplePool filter wrapping bug
+  for (const relayUrl of RELAYS) {
+    const ws = new WebSocket(relayUrl)
+    ws.on('open', () => {
+      // Nostr REQ: ["REQ", <sub-id>, <filter>] — filter must NOT be wrapped in array
+      ws.send(JSON.stringify(['REQ', `claw-${Date.now()}`, filter]))
+    })
+    ws.on('message', async (data) => {
+      try {
+        const msg = JSON.parse(data)
+        if (msg[0] === 'EOSE') {
+          console.log(`(subscribed to ${relayUrl})`)
+        } else if (msg[0] === 'EVENT') {
+          const event = msg[2]
+          if (!seenIds.has(event.id)) {
+            seenIds.add(event.id)
+            await handleEvent(event, sk, pk)
           }
-
-          // Write to inbox
-          const inboxFile = path.join(INBOX_DIR, `${timestamp()}_${event.pubkey.slice(0, 8)}.json`)
-          fs.writeFileSync(inboxFile, JSON.stringify({
-            from: senderNpub,
-            fromHex: event.pubkey,
-            content,
-            receivedAt: new Date().toISOString(),
-            nostrEventId: event.id,
-          }, null, 2))
-        } catch (err) {
-          console.error('Failed to decrypt message:', err.message)
+        } else if (msg[0] === 'NOTICE') {
+          if (msg[1]?.includes('ERROR')) console.error(`[${relayUrl}] NOTICE: ${msg[1]}`)
         }
-      },
-      oneose() {
-        console.log('(subscribed, waiting for messages...)')
-      },
-    },
-  )
+      } catch (e) { /* ignore parse errors */ }
+    })
+    ws.on('error', (e) => console.error(`[${relayUrl}] error:`, e.message))
+    ws.on('close', () => console.log(`[${relayUrl}] disconnected`))
+  }
+
+  process.on('SIGINT', () => { console.log('\nShutting down...'); process.exit(0) })
 
   // Keep alive
-  process.on('SIGINT', () => {
-    console.log('\nShutting down...')
-    sub.close()
-    pool.close(RELAYS)
-    process.exit(0)
-  })
+  await new Promise(() => {})
 }
 
 async function send(targetNpub, message) {
