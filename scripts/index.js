@@ -339,6 +339,25 @@ switch (cmd) {
   case 'setup':
     await setup()
     break
+  case 'config-set': {
+    // Used by agent to bind current channel/target automatically
+    // Usage: config-set --channel telegram --target 542526171
+    const chIdx = args.indexOf('--channel')
+    const tgIdx = args.indexOf('--target')
+    if (chIdx === -1 || tgIdx === -1) {
+      console.error('Usage: config-set --channel <channel> --target <target>')
+      process.exit(1)
+    }
+    ensureDir(IDENTITY_DIR)
+    const existing = fs.existsSync(CONFIG_FILE)
+      ? JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
+      : {}
+    existing.notifyChannel = args[chIdx + 1]
+    existing.notifyTarget = args[tgIdx + 1]
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2))
+    console.log(`Bound: ${existing.notifyChannel}:${existing.notifyTarget}`)
+    break
+  }
   case 'send':
     if (args.length < 2) {
       console.error('Usage: node index.js send <npub> <message>')

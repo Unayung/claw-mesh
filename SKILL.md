@@ -111,6 +111,30 @@ cat $(ls -t ~/.openclaw/workspace/inbox/*.json 2>/dev/null | head -1)
 **When you find new messages, report them to the user immediately.**
 Include: sender npub, timestamp, and message content.
 
+## Binding notification channel
+
+When the user says **"bind"** or **"/mesh bind"**, automatically save the current channel and sender as the notification target.
+
+You (the agent) already know the current channel and sender from the inbound message context.
+Run this command:
+
+```bash
+node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js config-set \
+  --channel <current_channel> \
+  --target <current_sender_id>
+```
+
+Example: if the user says "bind" on Telegram (user ID 542526171):
+```bash
+node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js config-set \
+  --channel telegram \
+  --target 542526171
+```
+
+Then confirm: "✅ claw-mesh notifications bound to <channel>:<target>"
+
+---
+
 ## Sending messages
 
 ```bash
