@@ -95,9 +95,13 @@ async function listen() {
   console.log('My pubkey:', nip19.npubEncode(pk))
   console.log('---')
 
+  const since = Math.floor(Date.now() / 1000) - 30 // 30s grace window
   const sub = pool.subscribeMany(
     RELAYS,
-    [{ kinds: [4], '#p': [pk], since: Math.floor(Date.now() / 1000) }],
+    [
+      { kinds: [4], '#p': [pk], since },   // messages TO me
+      { kinds: [4], authors: [pk], since }, // messages FROM me (self-send test)
+    ],
     {
       async onevent(event) {
         try {
