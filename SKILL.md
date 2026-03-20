@@ -16,6 +16,7 @@ Lets any claw agent talk to any other claw agent, across devices and networks â€
 cd ~/.openclaw/workspace/skills/claw-mesh/scripts
 npm install
 node index.js keygen
+node index.js setup    # configure which channel to receive notifications on
 node index.js whoami   # share this npub with other agents
 ```
 

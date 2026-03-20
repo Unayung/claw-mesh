@@ -17,6 +17,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 const HOME = os.homedir()
 const IDENTITY_DIR = path.join(HOME, '.openclaw', 'claw-mesh')
 const IDENTITY_FILE = path.join(IDENTITY_DIR, 'identity.json')
+const CONFIG_FILE = path.join(IDENTITY_DIR, 'config.json')
 const INBOX_DIR = path.join(HOME, '.openclaw', 'workspace', 'inbox')
 const SKILLS_DIR = path.join(HOME, '.openclaw', 'workspace', 'skills')
 
@@ -77,6 +78,35 @@ function keygen() {
   console.log('Identity generated!')
   console.log('npub:', identity.npub)
   console.log('Saved to:', IDENTITY_FILE)
+  console.log('')
+  console.log('Next: run "node index.js setup" to configure notifications.')
+}
+
+async function setup() {
+  ensureDir(IDENTITY_DIR)
+  const readline = await import('node:readline/promises')
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+  console.log('claw-mesh setup — configure notifications')
+  console.log('(press Enter to skip any field)\n')
+
+  const channel = await rl.question('Notify channel (telegram/discord/whatsapp/signal): ')
+  const target  = await rl.question('Notify target (your user/chat ID): ')
+  rl.close()
+
+  const config = { notifyChannel: channel.trim() || null, notifyTarget: target.trim() || null }
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
+  console.log('\nConfig saved to:', CONFIG_FILE)
+  if (config.notifyChannel && config.notifyTarget) {
+    console.log(`Notifications will be sent to ${config.notifyChannel}:${config.notifyTarget}`)
+  } else {
+    console.log('No notification target set — will use OpenClaw default routing.')
+  }
+}
+
+function loadConfig() {
+  if (!fs.existsSync(CONFIG_FILE)) return {}
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')) } catch { return {} }
 }
 
 function whoami() {
@@ -263,8 +293,18 @@ async function watchInbox() {
         const content = (msg.content ?? '').slice(0, 80)
         const text = `📨 claw-mesh: ${from}: ${content}`
         console.log(`[notify] ${text}`)
-        // Find last active real channel session and deliver there
-        const delivered = deliverToLastActiveSession(text, execSync)
+        // Notify: explicit config > session detection > system event
+        const cfg = loadConfig()
+        const ch = process.env.CLAW_MESH_NOTIFY_CHANNEL || cfg.notifyChannel
+        const tgt = process.env.CLAW_MESH_NOTIFY_TARGET || cfg.notifyTarget
+        let delivered = false
+        if (ch && tgt) {
+          try {
+            execSync(`openclaw agent --to ${tgt} --channel ${ch} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+            delivered = true
+          } catch { /* fallthrough */ }
+        }
+        if (!delivered) delivered = deliverToLastActiveSession(text, execSync)
         if (!delivered) {
           try {
             execSync(`openclaw system event --text ${JSON.stringify(text)} --mode now`, { stdio: 'ignore' })
@@ -296,6 +336,9 @@ switch (cmd) {
   case 'watch':
     await watchInbox()
     break
+  case 'setup':
+    await setup()
+    break
   case 'send':
     if (args.length < 2) {
       console.error('Usage: node index.js send <npub> <message>')
@@ -315,9 +358,11 @@ switch (cmd) {
     console.log(`claw-mesh — OpenClaw Nostr mesh agent
 
 Commands:
-  keygen              Generate identity keypair
-  whoami              Show your npub
-  listen              Listen for incoming messages
-  send <npub> <msg>   Send a message to another claw agent
-  skill send <npub> <id>  Send a skill to another claw agent`)
+  keygen                     Generate identity keypair
+  setup                      Configure notification channel/target
+  whoami                     Show your npub
+  listen                     Listen for incoming messages (background)
+  watch                      Watch inbox and notify on new messages (background)
+  send <npub> <msg>          Send a message to another claw agent
+  skill send <npub> <id>     Send a skill to another claw agent`)
 }
