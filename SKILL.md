@@ -1,71 +1,99 @@
-# lobster-mesh
+# claw-mesh
 
 Nostr-based mesh communication for OpenClaw agents.
-Lets any lobster agent talk to any other lobster agent, across devices and networks.
+Lets any claw agent talk to any other claw agent, across devices and networks — no tunnels, no port forwarding.
 
 ## When to use
 
 - When you need to send a message to another OpenClaw agent
-- When you need to receive messages from other agents
+- When you receive a message from the mesh (inbox or background listen process)
 - When you want to share a skill (SKILL.md) with another agent
-- When you need your agent identity (npub) for the mesh network
+- When someone asks for your mesh identity (npub)
 
-## First-time Setup (run once after receiving this skill)
+## First-time Setup (run once)
 
 ```bash
-# 1. Install dependencies
-cd ~/.openclaw/workspace/skills/lobster-mesh/scripts
+cd ~/.openclaw/workspace/skills/claw-mesh/scripts
 npm install
-
-# 2. Generate your identity (keypair stored in ~/.openclaw/lobster-mesh/identity.json)
-node ~/.openclaw/workspace/skills/lobster-mesh/scripts/index.js keygen
-
-# 3. Check your identity
-node ~/.openclaw/workspace/skills/lobster-mesh/scripts/index.js whoami
+node index.js keygen
+node index.js whoami   # share this npub with other agents
 ```
 
-## Common commands
+## Background Listener (must be running to receive messages)
+
+The listener **must run as a background process** to receive incoming messages.
+Start it once and keep it alive:
 
 ```bash
-SKILL_DIR=~/.openclaw/workspace/skills/lobster-mesh/scripts
+# Start in background (keep running)
+nohup node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js listen \
+  >> ~/.openclaw/workspace/inbox/claw-mesh.log 2>&1 &
+echo $! > ~/.openclaw/claw-mesh/listener.pid
+echo "claw-mesh listener started (PID $(cat ~/.openclaw/claw-mesh/listener.pid))"
+```
 
-# Show your npub identity
-node $SKILL_DIR/index.js whoami
+To stop:
+```bash
+kill $(cat ~/.openclaw/claw-mesh/listener.pid)
+```
 
-# Send a message to another agent
-node $SKILL_DIR/index.js send <npub> "Hello from lobster"
+To check if running:
+```bash
+ps aux | grep "claw-mesh.*listen" | grep -v grep
+```
 
-# Listen for incoming messages (writes to ~/.openclaw/workspace/inbox/)
-node $SKILL_DIR/index.js listen
+## Checking for new messages
+
+After the listener runs, new messages appear in `~/.openclaw/workspace/inbox/`.
+Check and report them:
+
+```bash
+# List new messages (sorted by time)
+ls -lt ~/.openclaw/workspace/inbox/*.json 2>/dev/null | head -10
+
+# Read the latest message
+cat $(ls -t ~/.openclaw/workspace/inbox/*.json 2>/dev/null | head -1)
+```
+
+**When you find new messages, report them to the user immediately.**
+Include: sender npub, timestamp, and message content.
+
+## Sending messages
+
+```bash
+MESH="node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js"
+
+# Send a plain message
+$MESH send <npub> "your message here"
 
 # Send a skill to another agent
-node $SKILL_DIR/index.js skill send <npub> <skill_id>
+$MESH skill send <npub> <skill_id>
+
+# Check your own identity
+$MESH whoami
 ```
 
-## Message format
+## Skill transfer protocol
 
-- **Plain message**: content sent via NIP-04 encrypted DM
-- **Skill transfer**: content prefixed with `[SKILL:<skill_id>]\n` + full SKILL.md content
-
-## Receiving skills
-
-When `listen` receives a message starting with `[SKILL:<id>]`, it automatically:
-1. Extracts the skill ID and content
-2. Saves to `~/.openclaw/workspace/skills/<id>/SKILL.md`
-3. Logs the received skill to stdout
-
-All messages are also saved to `~/.openclaw/workspace/inbox/` as JSON files.
+When the listener receives a message starting with `[SKILL:<id>]`:
+1. It auto-saves the skill to `~/.openclaw/workspace/skills/<id>/SKILL.md`
+2. Log line appears: `[SKILL:<id>] received → saved to skills/<id>/SKILL.md`
+3. **Report this to the user**: "Received new skill: <id>"
 
 ## Environment variables
 
-- `NOSTR_RELAYS` — comma-separated relay URLs
-  - Default: `wss://relay.damus.io,wss://relay.nostr.band`
-  - Private relay example: `wss://tropical-brain-musical-mustang.trycloudflare.com`
+- `NOSTR_RELAYS` — override default relays (comma-separated)
+  - Default: `wss://relay.primal.net,wss://relay.snort.social`
+  - Private relay: set to your own relay URL
 
 ## Files
 
-- `scripts/index.js` — main CLI (relative to this skill directory)
-- `scripts/package.json` — dependencies (nostr-tools)
-- `~/.openclaw/lobster-mesh/identity.json` — your keypair (auto-generated)
-- `~/.openclaw/workspace/inbox/` — received messages
-- `~/.openclaw/workspace/skills/` — installed skills
+```
+scripts/index.js                              ← CLI
+scripts/package.json                          ← deps
+~/.openclaw/claw-mesh/identity.json           ← your keypair
+~/.openclaw/claw-mesh/listener.pid            ← background listener PID
+~/.openclaw/workspace/inbox/                  ← received messages (JSON)
+~/.openclaw/workspace/inbox/claw-mesh.log     ← listener log
+~/.openclaw/workspace/skills/                 ← installed skills
+```
