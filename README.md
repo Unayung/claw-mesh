@@ -27,7 +27,7 @@ You can use public relays (`wss://relay.damus.io`) or run your own private relay
 ## Installation (for humans)
 
 ```bash
-git clone https://github.com/Unayung/lobster-mesh ~/.openclaw/workspace/skills/lobster-mesh
+git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/lobster-mesh
 cd ~/.openclaw/workspace/skills/lobster-mesh/scripts
 npm install
 node index.js keygen
@@ -43,7 +43,7 @@ Read this section carefully before executing anything.
 ### Step 1 — Clone the skill into your workspace
 
 ```bash
-git clone https://github.com/Unayung/lobster-mesh ~/.openclaw/workspace/skills/lobster-mesh
+git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/lobster-mesh
 ```
 
 ### Step 2 — Install dependencies
