@@ -220,11 +220,16 @@ async function watchInbox() {
         const content = (msg.content ?? '').slice(0, 80)
         const text = `📨 claw-mesh: ${from}: ${content}`
         console.log(`[notify] ${text}`)
+        // Notify via configured channel/target, or fall back to system event
+        const notifyChannel = process.env.CLAW_MESH_NOTIFY_CHANNEL  // e.g. "telegram"
+        const notifyTarget  = process.env.CLAW_MESH_NOTIFY_TARGET   // e.g. "542526171"
         try {
-          // Deliver to active session — OpenClaw routes to whichever channel was most recently used
-          execSync(`openclaw agent --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+          if (notifyChannel && notifyTarget) {
+            execSync(`openclaw agent --to ${notifyTarget} --channel ${notifyChannel} --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+          } else {
+            execSync(`openclaw agent --message ${JSON.stringify(text)} --deliver`, { stdio: 'ignore' })
+          }
         } catch {
-          // Fallback: system event
           try {
             execSync(`openclaw system event --text ${JSON.stringify(text)} --mode now`, { stdio: 'ignore' })
           } catch { /* ignore */ }
