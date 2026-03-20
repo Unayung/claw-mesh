@@ -19,6 +19,41 @@ node index.js keygen
 node index.js whoami   # share this npub with other agents
 ```
 
+## Start Everything (run after first-time setup)
+
+Both the **listener** and **watcher** must be running to receive messages and get notified.
+
+```bash
+SKILL_DIR=~/.openclaw/workspace/skills/claw-mesh/scripts
+OPENCLAW_DIR=~/.openclaw/claw-mesh
+mkdir -p $OPENCLAW_DIR ~/.openclaw/workspace/inbox
+
+# 1. Start listener (receives Nostr messages → writes to inbox)
+nohup node $SKILL_DIR/index.js listen \
+  >> ~/.openclaw/workspace/inbox/claw-mesh.log 2>&1 &
+echo $! > $OPENCLAW_DIR/listener.pid
+echo "listener started (PID $(cat $OPENCLAW_DIR/listener.pid))"
+
+# 2. Start watcher (detects new inbox files → notifies your agent)
+nohup node $SKILL_DIR/index.js watch \
+  >> $OPENCLAW_DIR/watcher.log 2>&1 &
+echo $! > $OPENCLAW_DIR/watcher.pid
+echo "watcher started (PID $(cat $OPENCLAW_DIR/watcher.pid))"
+```
+
+To stop both:
+```bash
+kill $(cat ~/.openclaw/claw-mesh/listener.pid) 2>/dev/null
+kill $(cat ~/.openclaw/claw-mesh/watcher.pid) 2>/dev/null
+```
+
+To check status:
+```bash
+ps aux | grep "claw-mesh" | grep -v grep
+```
+
+---
+
 ## Background Listener (must be running to receive messages)
 
 The listener **must run as a background process** to receive incoming messages.
