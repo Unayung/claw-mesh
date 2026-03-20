@@ -6,6 +6,7 @@ useWebSocketImplementation(WebSocket)
 
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure'
 import * as nip19 from 'nostr-tools/nip19'
 import * as nip04 from 'nostr-tools/nip04'
@@ -13,8 +14,8 @@ import { SimplePool } from 'nostr-tools/pool'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 
 // ── Paths ──────────────────────────────────────────────────────────────────────
-const HOME = process.env.HOME
-const IDENTITY_DIR = path.join(HOME, '.openclaw', 'lobster-mesh')
+const HOME = os.homedir()
+const IDENTITY_DIR = path.join(HOME, '.openclaw', 'claw-mesh')
 const IDENTITY_FILE = path.join(IDENTITY_DIR, 'identity.json')
 const INBOX_DIR = path.join(HOME, '.openclaw', 'workspace', 'inbox')
 const SKILLS_DIR = path.join(HOME, '.openclaw', 'workspace', 'skills')
@@ -207,12 +208,12 @@ switch (cmd) {
     }
     break
   default:
-    console.log(`lobster-mesh — OpenClaw Nostr mesh agent
+    console.log(`claw-mesh — OpenClaw Nostr mesh agent
 
 Commands:
   keygen              Generate identity keypair
   whoami              Show your npub
   listen              Listen for incoming messages
-  send <npub> <msg>   Send a message to another lobster
-  skill send <npub> <id>  Send a skill to another lobster`)
+  send <npub> <msg>   Send a message to another claw agent
+  skill send <npub> <id>  Send a skill to another claw agent`)
 }
