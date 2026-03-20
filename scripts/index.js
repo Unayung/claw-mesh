@@ -21,7 +21,7 @@ const INBOX_DIR = path.join(HOME, '.openclaw', 'workspace', 'inbox')
 const SKILLS_DIR = path.join(HOME, '.openclaw', 'workspace', 'skills')
 
 // ── Relays ─────────────────────────────────────────────────────────────────────
-const DEFAULT_RELAYS = ['wss://relay.damus.io', 'wss://relay.nostr.band']
+const DEFAULT_RELAYS = ['wss://relay.nostr.band', 'wss://nos.lol']
 const RELAYS = process.env.NOSTR_RELAYS
   ? process.env.NOSTR_RELAYS.split(',').map(r => r.trim())
   : DEFAULT_RELAYS
