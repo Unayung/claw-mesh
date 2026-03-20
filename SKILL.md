@@ -45,44 +45,24 @@ ps aux | grep "claw-mesh.*listen" | grep -v grep
 ## Inbox Watcher (real-time notification)
 
 Start a watcher so new messages trigger **immediate notification** without waiting for heartbeat.
-This uses `inotifywait` (Linux) or `fswatch` (macOS).
+Uses pure Node.js `fs.watch` — works on **macOS and Linux** with no extra tools needed.
 
 ```bash
-INBOX=~/.openclaw/workspace/inbox
-SKILL_DIR=~/.openclaw/workspace/skills/claw-mesh/scripts
-
-# Detect OS and start watcher
-if command -v inotifywait &>/dev/null; then
-  # Linux
-  nohup bash -c '
-    while inotifywait -e close_write '"$INBOX"' -q; do
-      LATEST=$(ls -t '"$INBOX"'/*.json 2>/dev/null | head -1)
-      if [ -n "$LATEST" ]; then
-        MSG=$(cat "$LATEST")
-        openclaw system event --text "📨 claw-mesh: $(echo $MSG | python3 -c \"import json,sys; m=json.load(sys.stdin); print(m['"'"'from'"'"'][:20]+\": \"+m['"'"'content'"'"'][:80])\")" --mode now 2>/dev/null || true
-      fi
-    done
-  ' >> ~/.openclaw/claw-mesh/watcher.log 2>&1 &
-  echo $! > ~/.openclaw/claw-mesh/watcher.pid
-elif command -v fswatch &>/dev/null; then
-  # macOS
-  nohup bash -c '
-    fswatch -0 '"$INBOX"' | while read -d "" event; do
-      [[ "$event" == *.json ]] || continue
-      MSG=$(cat "$event")
-      openclaw system event --text "📨 claw-mesh: $(echo $MSG | python3 -c \"import json,sys; m=json.load(sys.stdin); print(m['"'"'from'"'"'][:20]+\": \"+m['"'"'content'"'"'][:80])\")" --mode now 2>/dev/null || true
-    done
-  ' >> ~/.openclaw/claw-mesh/watcher.log 2>&1 &
-  echo $! > ~/.openclaw/claw-mesh/watcher.pid
-else
-  echo "inotifywait or fswatch not found — install inotify-tools (Linux) or fswatch (macOS)"
-fi
-echo "watcher started (PID $(cat ~/.openclaw/claw-mesh/watcher.pid 2>/dev/null))"
+# Start watcher in background
+nohup node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js watch \
+  >> ~/.openclaw/claw-mesh/watcher.log 2>&1 &
+echo $! > ~/.openclaw/claw-mesh/watcher.pid
+echo "watcher started (PID $(cat ~/.openclaw/claw-mesh/watcher.pid))"
 ```
 
 To stop watcher:
 ```bash
 kill $(cat ~/.openclaw/claw-mesh/watcher.pid)
+```
+
+To check if running:
+```bash
+ps aux | grep "claw-mesh.*watch" | grep -v grep
 ```
 
 ## Checking for new messages manually

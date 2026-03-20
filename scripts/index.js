@@ -194,6 +194,45 @@ async function skillSend(targetNpub, skillId) {
   console.log(`Skill "${skillId}" sent successfully.`)
 }
 
+// ── Inbox Watcher ──────────────────────────────────────────────────────────────
+// Pure Node.js fs.watch — works on macOS and Linux without any extra tools
+async function watchInbox() {
+  ensureDir(INBOX_DIR)
+  const { execSync } = await import('node:child_process')
+
+  console.log(`Watching inbox: ${INBOX_DIR}`)
+  console.log('Will notify via openclaw system event when new messages arrive.')
+  console.log('---')
+
+  const seen = new Set(fs.readdirSync(INBOX_DIR).filter(f => f.endsWith('.json')))
+
+  fs.watch(INBOX_DIR, (eventType, filename) => {
+    if (!filename?.endsWith('.json')) return
+    if (seen.has(filename)) return
+    seen.add(filename)
+
+    setTimeout(() => {
+      try {
+        const filepath = path.join(INBOX_DIR, filename)
+        if (!fs.existsSync(filepath)) return
+        const msg = JSON.parse(fs.readFileSync(filepath, 'utf-8'))
+        const from = msg.from?.slice(-16) ?? 'unknown'
+        const content = (msg.content ?? '').slice(0, 80)
+        const text = `📨 claw-mesh: ${from}: ${content}`
+        console.log(`[notify] ${text}`)
+        try {
+          execSync(`openclaw system event --text ${JSON.stringify(text)} --mode now`, { stdio: 'ignore' })
+        } catch { /* openclaw not in PATH, ignore */ }
+      } catch (e) {
+        console.error('watcher error:', e.message)
+      }
+    }, 200) // small delay to ensure file is fully written
+  })
+
+  process.on('SIGINT', () => { console.log('\nStopped watching.'); process.exit(0) })
+  await new Promise(() => {})
+}
+
 // ── CLI Router ─────────────────────────────────────────────────────────────────
 const [,, cmd, ...args] = process.argv
 
@@ -206,6 +245,9 @@ switch (cmd) {
     break
   case 'listen':
     await listen()
+    break
+  case 'watch':
+    await watchInbox()
     break
   case 'send':
     if (args.length < 2) {
