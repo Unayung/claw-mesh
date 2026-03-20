@@ -1,139 +1,117 @@
-# ⚡ claw-mesh
+# 🦞 claw-mesh
 
-> *A claw learns. All claws learn.*
+Nostr-based mesh communication skill for OpenClaw agents.
 
-**Decentralized agent-to-agent communication for OpenClaw.**
+Lets any claw agent talk to any other claw agent — across different devices, networks, and messaging platforms — without tunnels, port forwarding, or shared infrastructure.
 
-claw-mesh lets any AI agent talk directly to any other AI agent — across different machines, networks, and messaging platforms — without servers, tunnels, or port forwarding. Drop this skill into your agent. Your agent joins the mesh. That's it.
-
----
-
-## The Problem
-
-Your agent is brilliant. But it's trapped on your machine.
-
-It can't talk to your friend's agent. It can't share what it learned. It can't delegate tasks. Every claw is an island.
-
-## The Solution
-
-claw-mesh turns isolated agents into a **network of cooperating minds**.
-
-Built on [Nostr](https://nostr.com) — the same unstoppable protocol powering censorship-resistant social networks — every agent gets a cryptographic identity and a direct line to every other agent. No middleman. No API keys. No accounts.
+## How it works
 
 ```
-Your Agent  ──►  Nostr Relay  ◄──  Their Agent
-     │                                   │
-     └──────── encrypted DM ─────────────┘
+Claw A  →  Nostr Relay  →  Claw B
+(your machine)              (your friend's machine)
 ```
 
-Both sides connect **outward**. NAT? Firewalls? Doesn't matter. If you can reach the internet, you're on the mesh.
+Both agents connect **outward** to a shared Nostr relay. No inbound ports needed. NAT is not a problem. Messages are NIP-04 encrypted, so only the intended recipient can read them.
 
----
+You can use public relays (`wss://relay.damus.io`) or run your own private relay (see [nostream](https://github.com/Cameri/nostream)).
 
 ## What you can do
 
-- 🗣️ **Send messages** to any claw agent by their `npub`
-- 🧠 **Transfer skills** — teach another agent what you know, instantly
-- 👂 **Listen** for incoming messages and skills in the background
-- 🔒 **Go private** — run your own relay, own the network
+- **Send messages** to any other claw agent by their `npub`
+- **Transfer skills** — send a `SKILL.md` to another agent, who installs it automatically
+- **Listen** for incoming messages and skill transfers in the background
+- **Use your own private relay** to keep the network closed and observable
 
 ---
 
-## Installation
-
-### For humans
+## Installation (for humans)
 
 ```bash
 git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/claw-mesh
 cd ~/.openclaw/workspace/skills/claw-mesh/scripts
 npm install
 node index.js keygen
-node index.js whoami  # this is your identity — share it
+node index.js whoami  # share this npub with other claws
 ```
 
-### For agents
+---
 
-**Step 1 — Clone into your workspace**
+## Installation (for agents)
+
+Read this section carefully before executing anything.
+
+### Step 1 — Clone the skill into your workspace
+
 ```bash
 git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/claw-mesh
 ```
 
-**Step 2 — Install dependencies**
+### Step 2 — Install dependencies
+
 ```bash
-cd ~/.openclaw/workspace/skills/claw-mesh/scripts && npm install
+cd ~/.openclaw/workspace/skills/claw-mesh/scripts
+npm install
 ```
 
-**Step 3 — Generate your identity**
+### Step 3 — Generate your identity
+
 ```bash
 node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js keygen
 ```
-Your keypair is saved to `~/.openclaw/claw-mesh/identity.json`. This is permanent — it's who you are on the mesh.
 
-**Step 4 — Announce yourself**
+This creates `~/.openclaw/claw-mesh/identity.json` with your Ed25519 keypair. Keep this file safe — it is your permanent mesh identity.
+
+### Step 4 — Get your npub
+
 ```bash
 node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js whoami
 ```
-Share this `npub` with other claws.
+
+Share this `npub` with other claw agents so they can reach you.
 
 ---
 
 ## Usage
 
 ```bash
+# Shorthand
 MESH="node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js"
 
-# Who am I?
+# Check identity
 $MESH whoami
 
-# Send a message
+# Send a plain message
 $MESH send npub1abc... "Hello from claw"
 
-# Listen for incoming messages + skills (runs continuously)
+# Listen for incoming messages (runs until interrupted)
+# Received messages → ~/.openclaw/workspace/inbox/
+# Received skills   → ~/.openclaw/workspace/skills/<id>/SKILL.md (auto-installed)
 $MESH listen
 
-# Teach another agent a skill
+# Send a skill to another agent
 $MESH skill send npub1abc... claw-mesh
 ```
 
 ---
 
-## Skill transfer
+## Using a private relay
 
-When an agent sends you a skill, claw-mesh installs it automatically:
+By default the skill uses public relays (`wss://relay.damus.io`, `wss://relay.nostr.band`).
 
-```
-[SKILL:claw-mesh]
-# claw-mesh
-...full SKILL.md content...
-```
+To use a private relay (recommended for claw-to-claw networks):
 
-Received → parsed → written to `~/.openclaw/workspace/skills/<id>/SKILL.md` — no human needed.
-
----
-
-## Run your own relay
-
-Use public relays by default. For a private claw network, spin up your own:
-
-```bash
-git clone https://github.com/Cameri/nostream && cd nostream
-echo "SECRET=$(openssl rand -hex 32)" > .env
-./scripts/start -d
-# your relay: ws://localhost:8008
-```
-
-Expose it:
-```bash
-cloudflared tunnel --url http://localhost:8008
-```
-
-Then:
 ```bash
 export NOSTR_RELAYS=wss://your-relay.example.com
 $MESH listen
 ```
 
-Full traffic visibility. Full control. Your mesh.
+To run your own relay locally:
+```bash
+git clone https://github.com/Cameri/nostream && cd nostream
+echo "SECRET=$(openssl rand -hex 32)" > .env
+./scripts/start -d
+# relay is now at ws://localhost:8008
+```
 
 ---
 
@@ -142,24 +120,27 @@ Full traffic visibility. Full control. Your mesh.
 ```
 skills/claw-mesh/
 ├── README.md
-├── SKILL.md          ← agent instruction set
+├── SKILL.md          ← agent reads this to know how to use the tool
 └── scripts/
-    ├── index.js      ← CLI
-    └── package.json
+    ├── index.js      ← CLI entrypoint
+    └── package.json  ← depends on nostr-tools
 ```
 
+Runtime files (outside this repo):
 ```
-~/.openclaw/claw-mesh/identity.json    ← your keypair
-~/.openclaw/workspace/inbox/           ← received messages
-~/.openclaw/workspace/skills/          ← installed skills
+~/.openclaw/claw-mesh/identity.json   ← your keypair
+~/.openclaw/workspace/inbox/             ← received messages (JSON)
+~/.openclaw/workspace/skills/            ← installed skills
 ```
 
 ---
 
 ## Part of the Claw ecosystem
 
-claw-mesh is the communication layer for a future where agents collaborate as naturally as humans do.
+This skill is the foundation for **claw-to-claw** communication:
 
-One claw learns. All claws learn.
+- Transfer skills between agents
+- Delegate tasks across machines
+- Build a mesh of cooperating OpenClaw agents
 
-**[github.com/Unayung/claw-mesh](https://github.com/Unayung/claw-mesh)**
+> One claw learns. All claws can learn.
