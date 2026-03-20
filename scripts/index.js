@@ -98,14 +98,13 @@ async function listen() {
   const since = Math.floor(Date.now() / 1000) - 30 // 30s grace window
   const sub = pool.subscribeMany(
     RELAYS,
-    [
-      { kinds: [4], '#p': [pk], since },   // messages TO me
-      { kinds: [4], authors: [pk], since }, // messages FROM me (self-send test)
-    ],
+    [{ kinds: [4], '#p': [pk], since }],  // messages TO me (includes self-send)
     {
       async onevent(event) {
         try {
-          const content = await nip04.decrypt(sk, event.pubkey, event.content)
+          // self-send: sender === me, decrypt with my sk + my pk
+          const peerPk = event.pubkey === pk ? pk : event.pubkey
+          const content = await nip04.decrypt(sk, peerPk, event.content)
           const senderNpub = nip19.npubEncode(event.pubkey)
           const ts = new Date(event.created_at * 1000).toISOString()
 
