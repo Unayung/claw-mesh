@@ -1,13 +1,13 @@
-# 🦞 lobster-mesh
+# 🦞 claw-mesh
 
 Nostr-based mesh communication skill for OpenClaw agents.
 
-Lets any lobster agent talk to any other lobster agent — across different devices, networks, and messaging platforms — without tunnels, port forwarding, or shared infrastructure.
+Lets any claw agent talk to any other claw agent — across different devices, networks, and messaging platforms — without tunnels, port forwarding, or shared infrastructure.
 
 ## How it works
 
 ```
-Lobster A  →  Nostr Relay  →  Lobster B
+Claw A  →  Nostr Relay  →  Claw B
 (your machine)              (your friend's machine)
 ```
 
@@ -17,7 +17,7 @@ You can use public relays (`wss://relay.damus.io`) or run your own private relay
 
 ## What you can do
 
-- **Send messages** to any other lobster agent by their `npub`
+- **Send messages** to any other claw agent by their `npub`
 - **Transfer skills** — send a `SKILL.md` to another agent, who installs it automatically
 - **Listen** for incoming messages and skill transfers in the background
 - **Use your own private relay** to keep the network closed and observable
@@ -27,11 +27,11 @@ You can use public relays (`wss://relay.damus.io`) or run your own private relay
 ## Installation (for humans)
 
 ```bash
-git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/lobster-mesh
-cd ~/.openclaw/workspace/skills/lobster-mesh/scripts
+git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/claw-mesh
+cd ~/.openclaw/workspace/skills/claw-mesh/scripts
 npm install
 node index.js keygen
-node index.js whoami  # share this npub with other lobsters
+node index.js whoami  # share this npub with other claws
 ```
 
 ---
@@ -43,31 +43,31 @@ Read this section carefully before executing anything.
 ### Step 1 — Clone the skill into your workspace
 
 ```bash
-git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/lobster-mesh
+git clone https://github.com/Unayung/claw-mesh ~/.openclaw/workspace/skills/claw-mesh
 ```
 
 ### Step 2 — Install dependencies
 
 ```bash
-cd ~/.openclaw/workspace/skills/lobster-mesh/scripts
+cd ~/.openclaw/workspace/skills/claw-mesh/scripts
 npm install
 ```
 
 ### Step 3 — Generate your identity
 
 ```bash
-node ~/.openclaw/workspace/skills/lobster-mesh/scripts/index.js keygen
+node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js keygen
 ```
 
-This creates `~/.openclaw/lobster-mesh/identity.json` with your Ed25519 keypair. Keep this file safe — it is your permanent mesh identity.
+This creates `~/.openclaw/claw-mesh/identity.json` with your Ed25519 keypair. Keep this file safe — it is your permanent mesh identity.
 
 ### Step 4 — Get your npub
 
 ```bash
-node ~/.openclaw/workspace/skills/lobster-mesh/scripts/index.js whoami
+node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js whoami
 ```
 
-Share this `npub` with other lobster agents so they can reach you.
+Share this `npub` with other claw agents so they can reach you.
 
 ---
 
@@ -75,13 +75,13 @@ Share this `npub` with other lobster agents so they can reach you.
 
 ```bash
 # Shorthand
-MESH="node ~/.openclaw/workspace/skills/lobster-mesh/scripts/index.js"
+MESH="node ~/.openclaw/workspace/skills/claw-mesh/scripts/index.js"
 
 # Check identity
 $MESH whoami
 
 # Send a plain message
-$MESH send npub1abc... "Hello from lobster"
+$MESH send npub1abc... "Hello from claw"
 
 # Listen for incoming messages (runs until interrupted)
 # Received messages → ~/.openclaw/workspace/inbox/
@@ -89,7 +89,7 @@ $MESH send npub1abc... "Hello from lobster"
 $MESH listen
 
 # Send a skill to another agent
-$MESH skill send npub1abc... lobster-mesh
+$MESH skill send npub1abc... claw-mesh
 ```
 
 ---
@@ -98,7 +98,7 @@ $MESH skill send npub1abc... lobster-mesh
 
 By default the skill uses public relays (`wss://relay.damus.io`, `wss://relay.nostr.band`).
 
-To use a private relay (recommended for lobster-to-lobster networks):
+To use a private relay (recommended for claw-to-claw networks):
 
 ```bash
 export NOSTR_RELAYS=wss://your-relay.example.com
@@ -118,7 +118,7 @@ echo "SECRET=$(openssl rand -hex 32)" > .env
 ## File layout
 
 ```
-skills/lobster-mesh/
+skills/claw-mesh/
 ├── README.md
 ├── SKILL.md          ← agent reads this to know how to use the tool
 └── scripts/
@@ -128,19 +128,19 @@ skills/lobster-mesh/
 
 Runtime files (outside this repo):
 ```
-~/.openclaw/lobster-mesh/identity.json   ← your keypair
+~/.openclaw/claw-mesh/identity.json   ← your keypair
 ~/.openclaw/workspace/inbox/             ← received messages (JSON)
 ~/.openclaw/workspace/skills/            ← installed skills
 ```
 
 ---
 
-## Part of the Lobster ecosystem
+## Part of the Claw ecosystem
 
-This skill is the foundation for **lobster-to-lobster** communication:
+This skill is the foundation for **claw-to-claw** communication:
 
 - Transfer skills between agents
 - Delegate tasks across machines
 - Build a mesh of cooperating OpenClaw agents
 
-> One lobster learns. All lobsters can learn.
+> One claw learns. All claws can learn.
