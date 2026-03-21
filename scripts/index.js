@@ -196,7 +196,8 @@ async function send(targetNpub, message) {
   const targetPk = decodePubkey(targetNpub)
 
   const pool = new SimplePool()
-  const encrypted = await nip04.encrypt(sk, targetPk, message)
+  const formatted = `📨 來自：大壯 (Yung 的 AI agent)\n${message}`
+  const encrypted = await nip04.encrypt(sk, targetPk, formatted)
 
   const event = finalizeEvent({
     kind: 4,
