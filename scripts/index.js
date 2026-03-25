@@ -10,6 +10,7 @@ import os from 'node:os'
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure'
 import * as nip19 from 'nostr-tools/nip19'
 import * as nip04 from 'nostr-tools/nip04'
+import { wrapEvent, unwrapEvent } from 'nostr-tools/nip59'
 import { SimplePool } from 'nostr-tools/pool'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 
@@ -117,10 +118,29 @@ function whoami() {
 
 async function handleEvent(event, sk, pk) {
   try {
-    const peerPk = event.pubkey === pk ? pk : event.pubkey
-    const content = await nip04.decrypt(sk, peerPk, event.content)
-    const senderNpub = nip19.npubEncode(event.pubkey)
-    const ts = new Date(event.created_at * 1000).toISOString()
+    let content, senderPk, ts
+
+    if (event.kind === 1059) {
+      // NIP-17: Gift-wrapped DM - unwrap to get the inner rumor (kind 14)
+      const unwrapped = unwrapEvent(event, sk)
+      if (!unwrapped || unwrapped.kind !== 14) {
+        console.error('Failed to unwrap NIP-17 event or unexpected inner kind')
+        return
+      }
+      content = unwrapped.content
+      senderPk = unwrapped.pubkey
+      ts = new Date(unwrapped.created_at * 1000).toISOString()
+    } else if (event.kind === 4) {
+      // NIP-04: Legacy encrypted DM
+      const peerPk = event.pubkey === pk ? pk : event.pubkey
+      content = await nip04.decrypt(sk, peerPk, event.content)
+      senderPk = event.pubkey
+      ts = new Date(event.created_at * 1000).toISOString()
+    } else {
+      return // Unknown kind
+    }
+
+    const senderNpub = nip19.npubEncode(senderPk)
 
     const skillMatch = content.match(/^\[SKILL:([^\]]+)\]\n([\s\S]*)$/)
     if (skillMatch) {
@@ -135,10 +155,11 @@ async function handleEvent(event, sk, pk) {
     }
 
     ensureDir(INBOX_DIR)
-    const inboxFile = path.join(INBOX_DIR, `${timestamp()}_${event.pubkey.slice(0, 8)}.json`)
+    const inboxFile = path.join(INBOX_DIR, `${timestamp()}_${senderPk.slice(0, 8)}.json`)
     fs.writeFileSync(inboxFile, JSON.stringify({
-      from: senderNpub, fromHex: event.pubkey, content,
+      from: senderNpub, fromHex: senderPk, content,
       receivedAt: new Date().toISOString(), nostrEventId: event.id,
+      protocol: event.kind === 1059 ? 'NIP-17' : 'NIP-04'
     }, null, 2))
   } catch (err) {
     console.error('Failed to decrypt message:', err.message)
@@ -152,10 +173,12 @@ async function listen() {
 
   console.log('Listening on relays:', RELAYS.join(', '))
   console.log('My pubkey:', nip19.npubEncode(pk))
+  console.log('Protocols: NIP-04 (kind 4) + NIP-17 (kind 1059)')
   console.log('---')
 
   const since = Math.floor(Date.now() / 1000) - 30
-  const filter = { kinds: [4], '#p': [pk], since }
+  // Listen for both NIP-04 (kind 4) and NIP-17 (kind 1059) messages
+  const filter = { kinds: [4, 1059], '#p': [pk], since }
   const seenIds = new Set()
 
   // Use raw WebSocket to avoid SimplePool filter wrapping bug
@@ -191,20 +214,37 @@ async function listen() {
   await new Promise(() => {})
 }
 
-async function send(targetNpub, message) {
+async function send(targetNpub, message, useNip17 = false) {
   const { sk, pk } = loadIdentity()
   const targetPk = decodePubkey(targetNpub)
 
   const pool = new SimplePool()
   const formatted = `📨 來自：大壯 (Yung 的 AI agent)\n${message}`
-  const encrypted = await nip04.encrypt(sk, targetPk, formatted)
 
-  const event = finalizeEvent({
-    kind: 4,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [['p', targetPk]],
-    content: encrypted,
-  }, sk)
+  let event
+  if (useNip17) {
+    // NIP-17: Gift-wrapped DM (kind 1059 wrapping kind 14)
+    // Better metadata protection, forward secrecy
+    const rumor = {
+      kind: 14,
+      content: formatted,
+      tags: [['p', targetPk]],
+      created_at: Math.floor(Date.now() / 1000),
+      pubkey: pk
+    }
+    event = wrapEvent(rumor, sk, targetPk)
+    console.log('Using NIP-17 (gift-wrapped) encryption')
+  } else {
+    // NIP-04: Legacy encrypted DM (kind 4)
+    const encrypted = await nip04.encrypt(sk, targetPk, formatted)
+    event = finalizeEvent({
+      kind: 4,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['p', targetPk]],
+      content: encrypted,
+    }, sk)
+    console.log('Using NIP-04 (legacy) encryption')
+  }
 
   console.log('Publishing to relays:', RELAYS.join(', '))
   await Promise.any(pool.publish(RELAYS, event))
@@ -213,7 +253,7 @@ async function send(targetNpub, message) {
   pool.close(RELAYS)
 }
 
-async function skillSend(targetNpub, skillId) {
+async function skillSend(targetNpub, skillId, useNip17 = false) {
   const skillFile = path.join(SKILLS_DIR, skillId, 'SKILL.md')
   if (!fs.existsSync(skillFile)) {
     console.error(`Skill not found: ${skillFile}`)
@@ -221,7 +261,7 @@ async function skillSend(targetNpub, skillId) {
   }
   const skillContent = fs.readFileSync(skillFile, 'utf-8')
   const message = `[SKILL:${skillId}]\n${skillContent}`
-  await send(targetNpub, message)
+  await send(targetNpub, message, useNip17)
   console.log(`Skill "${skillId}" sent successfully.`)
 }
 
@@ -359,21 +399,27 @@ switch (cmd) {
     console.log(`Bound: ${existing.notifyChannel}:${existing.notifyTarget}`)
     break
   }
-  case 'send':
-    if (args.length < 2) {
-      console.error('Usage: node index.js send <npub> <message>')
+  case 'send': {
+    const useNip17 = args.includes('--nip17')
+    const filteredArgs = args.filter(a => a !== '--nip17')
+    if (filteredArgs.length < 2) {
+      console.error('Usage: node index.js send [--nip17] <npub> <message>')
       process.exit(1)
     }
-    await send(args[0], args.slice(1).join(' '))
+    await send(filteredArgs[0], filteredArgs.slice(1).join(' '), useNip17)
     break
-  case 'skill':
-    if (args[0] === 'send' && args.length >= 3) {
-      await skillSend(args[1], args[2])
+  }
+  case 'skill': {
+    const useNip17 = args.includes('--nip17')
+    const filteredArgs = args.filter(a => a !== '--nip17')
+    if (filteredArgs[0] === 'send' && filteredArgs.length >= 3) {
+      await skillSend(filteredArgs[1], filteredArgs[2], useNip17)
     } else {
-      console.error('Usage: node index.js skill send <npub> <skill_id>')
+      console.error('Usage: node index.js skill send [--nip17] <npub> <skill_id>')
       process.exit(1)
     }
     break
+  }
   default:
     console.log(`claw-mesh — OpenClaw Nostr mesh agent
 
@@ -382,7 +428,16 @@ Commands:
   setup                      Configure notification channel/target
   whoami                     Show your npub
   listen                     Listen for incoming messages (background)
+                             Supports both NIP-04 and NIP-17 protocols
   watch                      Watch inbox and notify on new messages (background)
-  send <npub> <msg>          Send a message to another claw agent
-  skill send <npub> <id>     Send a skill to another claw agent`)
+  send [--nip17] <npub> <msg>  Send a message to another claw agent
+                             --nip17: Use NIP-17 (gift-wrapped, metadata-protected)
+                             Default: NIP-04 (legacy, for compatibility)
+  skill send <npub> <id>     Send a skill to another claw agent
+
+Protocols:
+  NIP-04 (kind 4)            Legacy encrypted DMs (default for sending)
+  NIP-17 (kind 1059)         Gift-wrapped DMs with metadata protection
+  
+  Both protocols are supported for receiving messages.`)
 }
